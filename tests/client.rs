@@ -142,6 +142,49 @@ async fn test_topic_crud() {
 }
 
 #[tokio::test]
+async fn test_create_topic_with_configs() {
+    maybe_start_logging();
+
+    let test_cfg = maybe_skip_kafka_integration!();
+    let client = ClientBuilder::new(test_cfg.bootstrap_brokers)
+        .build()
+        .await
+        .unwrap();
+    let controller_client = client.controller_client().unwrap();
+
+    // invalid config value is rejected by the broker
+    let err = controller_client
+        .create_topic_with_configs(
+            random_topic_name(),
+            1,
+            1,
+            vec![("retention.ms".to_string(), "not-a-number".to_string())],
+            5_000,
+        )
+        .await
+        .unwrap_err();
+    match err {
+        ClientError::ServerError {
+            protocol_error: ProtocolError::InvalidConfig,
+            ..
+        } => {}
+        _ => panic!("Unexpected error: {err}"),
+    }
+
+    // valid config value is accepted
+    controller_client
+        .create_topic_with_configs(
+            random_topic_name(),
+            1,
+            1,
+            vec![("retention.ms".to_string(), "86400000".to_string())],
+            5_000,
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn test_partition_client() {
     maybe_start_logging();
 
