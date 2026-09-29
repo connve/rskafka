@@ -13,8 +13,10 @@ use crate::{
     messenger::RequestError,
     protocol::{
         error::Error as ProtocolError,
-        messages::{CreateTopicRequest, CreateTopicsRequest, DeleteTopicsRequest},
-        primitives::{Array, Int16, Int32, String_},
+        messages::{
+            CreateTopicConfig, CreateTopicRequest, CreateTopicsRequest, DeleteTopicsRequest,
+        },
+        primitives::{Array, Int16, Int32, NullableString, String_},
     },
     throttle::maybe_throttle,
     validation::ExactlyOne,
@@ -49,13 +51,39 @@ impl ControllerClient {
         replication_factor: i16,
         timeout_ms: i32,
     ) -> Result<()> {
+        self.create_topic_with_configs(
+            name,
+            num_partitions,
+            replication_factor,
+            Vec::new(),
+            timeout_ms,
+        )
+        .await
+    }
+
+    /// Create a topic with topic-level configs, e.g. `("retention.ms", "86400000")`.
+    pub async fn create_topic_with_configs(
+        &self,
+        name: impl Into<String> + Send,
+        num_partitions: i32,
+        replication_factor: i16,
+        configs: Vec<(String, String)>,
+        timeout_ms: i32,
+    ) -> Result<()> {
         let request = &CreateTopicsRequest {
             topics: vec![CreateTopicRequest {
                 name: String_(name.into()),
                 num_partitions: Int32(num_partitions),
                 replication_factor: Int16(replication_factor),
                 assignments: vec![],
-                configs: vec![],
+                configs: configs
+                    .into_iter()
+                    .map(|(name, value)| CreateTopicConfig {
+                        name: String_(name),
+                        value: NullableString(Some(value)),
+                        tagged_fields: None,
+                    })
+                    .collect(),
                 tagged_fields: None,
             }],
             timeout_ms: Int32(timeout_ms),
